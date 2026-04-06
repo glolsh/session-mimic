@@ -212,20 +212,25 @@ func (p *persistentJar) save() error {
 	return os.WriteFile(p.filename, data, 0644)
 }
 
-func getRandomProfile() profiles.ClientProfile {
-	availableProfiles := []profiles.ClientProfile{
-		profiles.Chrome_120,
-		profiles.Chrome_117,
-		profiles.Safari_16_0,
-		profiles.Safari_IOS_16_0,
-		profiles.Firefox_117,
-		profiles.Firefox_120,
+type profileEntry struct {
+	Name    string
+	Profile profiles.ClientProfile
+}
+
+func getRandomProfile() profileEntry {
+	availableProfiles := []profileEntry{
+		{"Chrome_120", profiles.Chrome_120},
+		{"Chrome_117", profiles.Chrome_117},
+		{"Safari_16_0", profiles.Safari_16_0},
+		{"Safari_IOS_16_0", profiles.Safari_IOS_16_0},
+		{"Firefox_117", profiles.Firefox_117},
+		{"Firefox_120", profiles.Firefox_120},
 	}
 
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableProfiles))))
 	if err != nil {
 		// Fallback to Chrome 120 if random generation fails
-		return profiles.Chrome_120
+		return availableProfiles[0]
 	}
 
 	return availableProfiles[n.Int64()]
@@ -236,11 +241,13 @@ func main() {
 	var referer string
 	var byteRange string
 	var sessionID string
+	var debug bool
 
 	flag.StringVar(&targetURL, "url", "", "Target URL (required)")
 	flag.StringVar(&referer, "ref", "", "Referer header value (optional)")
 	flag.StringVar(&byteRange, "range", "", "Byte range for the Range header (optional, e.g., '0-1024')")
 	flag.StringVar(&sessionID, "session", "", "A string identifier for the session (optional)")
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode to print the response body and selected profile (optional)")
 
 	flag.Parse()
 
@@ -255,9 +262,14 @@ func main() {
 		log.Fatalf("Invalid URL provided: %v", err)
 	}
 
+	selectedProfile := getRandomProfile()
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Selected Profile: %s\n", selectedProfile.Name)
+	}
+
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
-		tls_client.WithClientProfile(getRandomProfile()),
+		tls_client.WithClientProfile(selectedProfile.Profile),
 	}
 
 	if sessionID != "" {
@@ -299,8 +311,15 @@ func main() {
 	}
 	defer resp.Body.Close()
 
-	// Discard the body to minimize memory/I/O usage
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		log.Printf("Warning: failed to read response body fully: %v", err)
+	if debug {
+		// Read and print the body to stdout
+		if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
+			log.Printf("Warning: failed to read response body fully: %v", err)
+		}
+	} else {
+		// Discard the body to minimize memory/I/O usage
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			log.Printf("Warning: failed to read response body fully: %v", err)
+		}
 	}
 }
