@@ -3,8 +3,15 @@
 # Exit on any error
 set -e
 
-echo "Compiling session-mimic..."
-go build -ldflags="-s -w" -o session-mimic main.go
+MIMIC_BIN="./session-mimic"
+
+if [ ! -f "$MIMIC_BIN" ]; then
+    echo "Error: Binary '$MIMIC_BIN' not found."
+    echo "Please download the artifact from GitHub Actions first."
+    exit 1
+fi
+
+chmod +x "$MIMIC_BIN"
 
 if ! command -v jq &> /dev/null; then
     echo "Error: jq is not installed. jq is required for this robust validation script."
