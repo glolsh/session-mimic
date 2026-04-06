@@ -212,20 +212,40 @@ func (p *persistentJar) save() error {
 	return os.WriteFile(p.filename, data, 0644)
 }
 
-func getRandomProfile() profiles.ClientProfile {
-	availableProfiles := []profiles.ClientProfile{
-		profiles.Chrome_120,
-		profiles.Chrome_117,
-		profiles.Safari_16_0,
-		profiles.Safari_IOS_16_0,
-		profiles.Firefox_117,
-		profiles.Firefox_120,
+type BrowserProfile struct {
+	ID      string
+	Profile profiles.ClientProfile
+	UA      string
+}
+
+func getRandomProfile() BrowserProfile {
+	availableProfiles := []BrowserProfile{
+		{
+			ID:      "Firefox_148",
+			Profile: profiles.Firefox_148,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; rv:148.0) Gecko/20100101 Firefox/148.0",
+		},
+		{
+			ID:      "Chrome_146_PSK",
+			Profile: profiles.Chrome_146_PSK,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		},
+		{
+			ID:      "Firefox_147_PSK",
+			Profile: profiles.Firefox_147_PSK,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; rv:147.0) Gecko/20100101 Firefox/147.0",
+		},
+		{
+			ID:      "Chrome_144_PSK",
+			Profile: profiles.Chrome_144_PSK,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		},
 	}
 
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableProfiles))))
 	if err != nil {
-		// Fallback to Chrome 120 if random generation fails
-		return profiles.Chrome_120
+		// Fallback to the first profile if random generation fails
+		return availableProfiles[0]
 	}
 
 	return availableProfiles[n.Int64()]
@@ -236,11 +256,13 @@ func main() {
 	var referer string
 	var byteRange string
 	var sessionID string
+	var debug bool
 
 	flag.StringVar(&targetURL, "url", "", "Target URL (required)")
 	flag.StringVar(&referer, "ref", "", "Referer header value (optional)")
 	flag.StringVar(&byteRange, "range", "", "Byte range for the Range header (optional, e.g., '0-1024')")
 	flag.StringVar(&sessionID, "session", "", "A string identifier for the session (optional)")
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode to print the response body and selected profile (optional)")
 
 	flag.Parse()
 
@@ -255,9 +277,17 @@ func main() {
 		log.Fatalf("Invalid URL provided: %v", err)
 	}
 
+	selectedProfile := getRandomProfile()
+	if debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Selected Profile: %s\n", selectedProfile.ID)
+		if len(selectedProfile.ID) > 3 && selectedProfile.ID[len(selectedProfile.ID)-3:] == "PSK" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] PSK Extension Enabled\n")
+		}
+	}
+
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
-		tls_client.WithClientProfile(getRandomProfile()),
+		tls_client.WithClientProfile(selectedProfile.Profile),
 	}
 
 	if sessionID != "" {
@@ -285,6 +315,9 @@ func main() {
 		log.Fatalf("Failed to create request: %v", err)
 	}
 
+	// Explicitly set the User-Agent header to perfectly match the chosen TLS profile
+	req.Header.Set("User-Agent", selectedProfile.UA)
+
 	if referer != "" {
 		req.Header.Set("Referer", referer)
 	}
@@ -299,8 +332,15 @@ func main() {
 	}
 	defer resp.Body.Close()
 
-	// Discard the body to minimize memory/I/O usage
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		log.Printf("Warning: failed to read response body fully: %v", err)
+	if debug {
+		// Read and print the body to stdout
+		if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
+			log.Printf("Warning: failed to read response body fully: %v", err)
+		}
+	} else {
+		// Discard the body to minimize memory/I/O usage
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			log.Printf("Warning: failed to read response body fully: %v", err)
+		}
 	}
 }

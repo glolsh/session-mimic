@@ -4,7 +4,7 @@ go 1.24.3
 
 require (
 	github.com/bogdanfinn/fhttp v0.6.8
-	github.com/bogdanfinn/tls-client v1.14.0
+	github.com/bogdanfinn/tls-client v1.14.1-0.20260329211727-a57772fb150c
 )
 
 require (
