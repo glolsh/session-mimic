@@ -68,7 +68,11 @@ func newPersistentJar(filename string) (*persistentJar, error) {
 				log.Printf("Warning: failed to create initial session file %s: %v", filename, createErr)
 			}
 		} else {
-			log.Printf("Warning: failed to load session from %s: %v", filename, err)
+			log.Printf("Corrupted session file, starting fresh")
+			// Save the fresh state to overwrite the corrupted file.
+			if createErr := p.save(); createErr != nil {
+				log.Printf("Warning: failed to overwrite corrupted session file %s: %v", filename, createErr)
+			}
 		}
 	}
 
@@ -212,20 +216,10 @@ func getRandomProfile() profiles.ClientProfile {
 	availableProfiles := []profiles.ClientProfile{
 		profiles.Chrome_120,
 		profiles.Chrome_117,
-		profiles.Chrome_112,
-		profiles.Chrome_111,
-		profiles.Chrome_110,
-		profiles.Chrome_109,
-		profiles.Safari_15_6_1,
 		profiles.Safari_16_0,
-		profiles.Safari_Ipad_15_6,
-		profiles.Safari_IOS_15_5,
-		profiles.Safari_IOS_15_6,
 		profiles.Safari_IOS_16_0,
 		profiles.Firefox_117,
 		profiles.Firefox_120,
-		profiles.Opera_89,
-		profiles.Opera_90,
 	}
 
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableProfiles))))
@@ -309,6 +303,4 @@ func main() {
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		log.Printf("Warning: failed to read response body fully: %v", err)
 	}
-
-	fmt.Printf("Request successful. Status code: %d\n", resp.StatusCode)
 }
