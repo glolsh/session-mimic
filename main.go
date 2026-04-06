@@ -212,24 +212,39 @@ func (p *persistentJar) save() error {
 	return os.WriteFile(p.filename, data, 0644)
 }
 
-type profileEntry struct {
-	Name    string
+type BrowserProfile struct {
+	ID      string
 	Profile profiles.ClientProfile
+	UA      string
 }
 
-func getRandomProfile() profileEntry {
-	availableProfiles := []profileEntry{
-		{"Chrome_120", profiles.Chrome_120},
-		{"Chrome_117", profiles.Chrome_117},
-		{"Safari_16_0", profiles.Safari_16_0},
-		{"Safari_IOS_16_0", profiles.Safari_IOS_16_0},
-		{"Firefox_117", profiles.Firefox_117},
-		{"Firefox_120", profiles.Firefox_120},
+func getRandomProfile() BrowserProfile {
+	availableProfiles := []BrowserProfile{
+		{
+			ID:      "Firefox_148",
+			Profile: profiles.Firefox_148,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; rv:148.0) Gecko/20100101 Firefox/148.0",
+		},
+		{
+			ID:      "Chrome_146_PSK",
+			Profile: profiles.Chrome_146_PSK,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		},
+		{
+			ID:      "Firefox_147_PSK",
+			Profile: profiles.Firefox_147_PSK,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; rv:147.0) Gecko/20100101 Firefox/147.0",
+		},
+		{
+			ID:      "Chrome_144_PSK",
+			Profile: profiles.Chrome_144_PSK,
+			UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		},
 	}
 
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableProfiles))))
 	if err != nil {
-		// Fallback to Chrome 120 if random generation fails
+		// Fallback to the first profile if random generation fails
 		return availableProfiles[0]
 	}
 
@@ -264,7 +279,10 @@ func main() {
 
 	selectedProfile := getRandomProfile()
 	if debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Selected Profile: %s\n", selectedProfile.Name)
+		fmt.Fprintf(os.Stderr, "[DEBUG] Selected Profile: %s\n", selectedProfile.ID)
+		if len(selectedProfile.ID) > 3 && selectedProfile.ID[len(selectedProfile.ID)-3:] == "PSK" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] PSK Extension Enabled\n")
+		}
 	}
 
 	options := []tls_client.HttpClientOption{
@@ -296,6 +314,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create request: %v", err)
 	}
+
+	// Explicitly set the User-Agent header to perfectly match the chosen TLS profile
+	req.Header.Set("User-Agent", selectedProfile.UA)
 
 	if referer != "" {
 		req.Header.Set("Referer", referer)
