@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"math/big"
@@ -218,37 +219,48 @@ type BrowserProfile struct {
 	UA      string
 }
 
-func getRandomProfile() BrowserProfile {
-	availableProfiles := []BrowserProfile{
-		{
-			ID:      "Firefox_148",
-			Profile: profiles.Firefox_148,
-			UA:      "Mozilla/5.0 (Windows NT 10.0; rv:148.0) Gecko/20100101 Firefox/148.0",
-		},
-		{
-			ID:      "Chrome_146_PSK",
-			Profile: profiles.Chrome_146_PSK,
-			UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-		},
-		{
-			ID:      "Firefox_147_PSK",
-			Profile: profiles.Firefox_147_PSK,
-			UA:      "Mozilla/5.0 (Windows NT 10.0; rv:147.0) Gecko/20100101 Firefox/147.0",
-		},
-		{
-			ID:      "Chrome_144_PSK",
-			Profile: profiles.Chrome_144_PSK,
-			UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
-		},
+var availableProfiles = []BrowserProfile{
+	{
+		ID:      "Firefox_148",
+		Profile: profiles.Firefox_148,
+		UA:      "Mozilla/5.0 (Windows NT 10.0; rv:148.0) Gecko/20100101 Firefox/148.0",
+	},
+	{
+		ID:      "Chrome_146_PSK",
+		Profile: profiles.Chrome_146_PSK,
+		UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+	},
+	{
+		ID:      "Firefox_147_PSK",
+		Profile: profiles.Firefox_147_PSK,
+		UA:      "Mozilla/5.0 (Windows NT 10.0; rv:147.0) Gecko/20100101 Firefox/147.0",
+	},
+	{
+		ID:      "Chrome_144_PSK",
+		Profile: profiles.Chrome_144_PSK,
+		UA:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+	},
+	{
+		ID:      "Safari_IOS_18_5",
+		Profile: profiles.Safari_IOS_18_5,
+		UA:      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+	},
+}
+
+func getProfileForSession(sessionID string) BrowserProfile {
+	if sessionID == "" {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableProfiles))))
+		if err != nil {
+			return availableProfiles[0]
+		}
+		return availableProfiles[n.Int64()]
 	}
 
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(availableProfiles))))
-	if err != nil {
-		// Fallback to the first profile if random generation fails
-		return availableProfiles[0]
-	}
+	h := fnv.New32a()
+	h.Write([]byte(sessionID))
+	index := h.Sum32() % uint32(len(availableProfiles))
 
-	return availableProfiles[n.Int64()]
+	return availableProfiles[index]
 }
 
 func main() {
@@ -277,7 +289,8 @@ func main() {
 		log.Fatalf("Invalid URL provided: %v", err)
 	}
 
-	selectedProfile := getRandomProfile()
+	selectedProfile := getProfileForSession(sessionID)
+
 	if debug {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Selected Profile: %s\n", selectedProfile.ID)
 		if len(selectedProfile.ID) > 3 && selectedProfile.ID[len(selectedProfile.ID)-3:] == "PSK" {
@@ -315,7 +328,6 @@ func main() {
 		log.Fatalf("Failed to create request: %v", err)
 	}
 
-	// Explicitly set the User-Agent header to perfectly match the chosen TLS profile
 	req.Header.Set("User-Agent", selectedProfile.UA)
 
 	if referer != "" {
@@ -333,12 +345,10 @@ func main() {
 	defer resp.Body.Close()
 
 	if debug {
-		// Read and print the body to stdout
 		if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
 			log.Printf("Warning: failed to read response body fully: %v", err)
 		}
 	} else {
-		// Discard the body to minimize memory/I/O usage
 		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 			log.Printf("Warning: failed to read response body fully: %v", err)
 		}
